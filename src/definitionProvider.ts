@@ -8,8 +8,9 @@ export class LinkDefinitionProvider implements vscode.DefinitionProvider {
         token: vscode.CancellationToken
     ): vscode.Definition | null {
         // Match @link tag at the cursor position
-        const range = document.getWordRangeAtPosition(position, /{@link\s+[\w@/.-]+(?:!([\w]+))?(?:#([\w]+))?(?::([\w]+))?}/);
+        const range = document.getWordRangeAtPosition(position, /{@link\s+[\w@/.-]+(?:!([\w]+))?(?:#([\w]+))?(?::([\w]+))?(?:#([\w]+))?}/);
         if (!range) {
+            console.log('No @link tag found at cursor position');
             return null;
         }
 
@@ -23,19 +24,9 @@ export class LinkDefinitionProvider implements vscode.DefinitionProvider {
             return null;
         }
 
-        const declarations = symbol.getDeclarations();
-        if (!declarations || declarations.length === 0) {
-            console.warn('❌ No declarations found for symbol:', symbol.getName());
-            return null;
-        }
-
-        const declaration = declarations[0];
-        const sourceFile = declaration.getSourceFile();
+        console.log('🔗 Resolved Symbol:', symbol.name);
+        const { start, end, sourceFile } = symbol;
         const filePath = sourceFile.fileName;
-
-        const start = declaration.getStart();
-        const end = declaration.getEnd();
-
         const startPos = sourceFile.getLineAndCharacterOfPosition(start);
         const endPos = sourceFile.getLineAndCharacterOfPosition(end);
 
