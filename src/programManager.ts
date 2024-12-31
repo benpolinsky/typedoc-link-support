@@ -71,7 +71,5 @@ export function getTsProgram(): ts.Program {
 
     cachedProgram = ts.createProgram(allFiles, parsedRootConfig.options);
 
-    console.log('✅ Program Created. Total Files:', cachedProgram.getSourceFiles().length);
-
     return cachedProgram;
 }

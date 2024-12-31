@@ -1,0 +1,3 @@
+{
+  "references": [{ "path": "./packages/one" }, { "path": "./packages/two" }]
+}

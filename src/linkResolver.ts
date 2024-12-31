@@ -1,4 +1,6 @@
 import * as ts from 'typescript';
+import * as path from 'path';
+import * as fs from 'fs';
 import { getTsProgram } from './programManager';
 
 interface ResolvedLink {
@@ -19,13 +21,10 @@ export function resolveLink(link: string): ResolvedLink | null {
         return null;
     }
 
-    const [_, modulePath, exportName, member, modifier, memberAfterModifier] = match;
-    console.log('Parsed Link:', { modulePath, exportName, member, modifier, memberAfterModifier });
-
+    const [_, packageName, exportName, member, modifier, memberAfterModifier] = match;
+    console.log('Parsed Link:', { packageName, exportName, member, modifier, memberAfterModifier });
     const program = getTsProgram();
     const checker = program.getTypeChecker();
-
-    // Step 1: Resolve the export
     let resolvedSymbol: ts.Symbol | null = null;
 
     for (const sourceFile of program.getSourceFiles()) {
@@ -34,8 +33,22 @@ export function resolveLink(link: string): ResolvedLink | null {
         const sourceSymbol = checker.getSymbolAtLocation(sourceFile);
         if (!sourceSymbol || !sourceSymbol.exports) continue;
 
-        // Match the modulePath against imports or exports
-        if (sourceSymbol.exports.has(ts.escapeLeadingUnderscores(exportName))) {
+        console.log('Checking Source File:', sourceFile.fileName);
+        const packageJsonPath = packageUp(path.dirname(sourceFile.fileName));
+
+        if (!packageJsonPath) {
+            console.warn('Could not find package.json');
+            continue;
+        }
+
+        const packageJsonContents = fs.readFileSync(packageJsonPath, 'utf-8');
+        const packageJson = JSON.parse(packageJsonContents);
+
+        if (packageJson.name !== packageName) {
+            console.warn(`Package name mismatch: ${packageJson.name} !== ${packageName}`);
+            continue;
+        }
+        if (exportName && sourceSymbol.exports.has(ts.escapeLeadingUnderscores(exportName))) {
             resolvedSymbol = sourceSymbol.exports.get(ts.escapeLeadingUnderscores(exportName)) || null;
             console.log('Matched Package Symbol:', exportName);
             break;
@@ -43,7 +56,7 @@ export function resolveLink(link: string): ResolvedLink | null {
     }
 
     if (!resolvedSymbol) {
-        console.warn(`Could not resolve package/module: ${modulePath}`);
+        console.warn(`Could not resolve symbol: ${packageName}`);
         return null;
     }
 
@@ -56,6 +69,8 @@ export function resolveLink(link: string): ResolvedLink | null {
                     return declaration.kind === ts.SyntaxKind.ModuleDeclaration;
                 case 'interface':
                     return declaration.kind === ts.SyntaxKind.InterfaceDeclaration;
+                case 'type':
+                    return declaration.kind === ts.SyntaxKind.TypeAliasDeclaration;
                 case 'function':
                     return declaration.kind === ts.SyntaxKind.FunctionDeclaration;
                 case 'enum':
@@ -137,7 +152,7 @@ export function resolveLink(link: string): ResolvedLink | null {
     if (member) {
         const memberSymbol = resolvedSymbol.members?.get(ts.escapeLeadingUnderscores(member));
         if (!memberSymbol) {
-            console.warn(`Member '${member}' not found in '${exportName || modulePath}'`);
+            console.warn(`Member '${member}' not found in '${exportName || packageName}'`);
             return null;
         }
         console.log('Member Symbol Resolved:', member);
@@ -151,4 +166,27 @@ export function resolveLink(link: string): ResolvedLink | null {
         end: resolvedSymbol.valueDeclaration!.getEnd(),
         sourceFile: (resolvedSymbol as any).getDeclarations()![0].getSourceFile()
     };
+}
+
+function packageUp(startPath: string) {
+    // find the closest package.json file starting from the given path
+    // return the file path, or undefined if it could not be found
+
+    let currentDir = startPath;
+    while (true) {
+        const packageJsonPath = path.join(currentDir, 'package.json');
+        if (
+            fs.existsSync(packageJsonPath) &&
+            fs.statSync(packageJsonPath).isFile()
+        ) {
+            return packageJsonPath;
+        }
+
+        const parentDir = path.dirname(currentDir);
+        if (parentDir === currentDir) {
+            // Reached the root directory
+            return undefined;
+        }
+        currentDir = parentDir;
+    }
 }
